@@ -10,6 +10,7 @@ from Crypto.Util import Counter
 import os
 import random
 import binascii
+import contextlib
 import tempfile
 import shutil
 
@@ -42,16 +43,16 @@ class Mega:
             options = {}
         self.options = options
 
-    def login(self, email=None, password=None):
+    def login(self, email=None, password=None, mfa_code=None):
         if email:
-            self._login_user(email, password)
+            self._login_user(email, password, mfa_code)
         else:
             self.login_anonymous()
         self._trash_folder_node_id = self.get_node_by_type(4)[0]
         logger.info('Login complete')
         return self
 
-    def _login_user(self, email, password):
+    def _login_user(self, email, password, mfa_code=None):
         logger.info('Logging in user...')
         email = email.lower()
         get_user_salt_resp = self._api_request({'a': 'us0', 'user': email})
@@ -71,7 +72,11 @@ class Mega:
                                              dklen=32)
             password_aes = str_to_a32(pbkdf2_key[:16])
             user_hash = base64_url_encode(pbkdf2_key[-16:])
-        resp = self._api_request({'a': 'us', 'user': email, 'uh': user_hash})
+        request = {'a': 'us', 'user': email, 'uh': user_hash}
+        if mfa_code:
+            # Two-factor accounts: pass the current 6-digit TOTP code.
+            request['mfa'] = mfa_code
+        resp = self._api_request(request)
         if isinstance(resp, int):
             raise RequestError(resp)
         self._login_process(resp, password_aes)
@@ -688,14 +693,17 @@ class Mega:
 
         input_file = requests.get(file_url, stream=True).raw
 
-        if dest_path is None:
-            dest_path = ''
+        # A writable binary file-like object passed as dest_path receives the
+        # decrypted bytes directly; otherwise write to a temp file and then move
+        # it into dest_path (treated as a directory).
+        dest_is_stream = dest_path is not None and hasattr(dest_path, 'write')
+        if dest_is_stream:
+            output_file = dest_path
         else:
-            dest_path += '/'
-
-        with tempfile.NamedTemporaryFile(mode='w+b',
-                                         prefix='megapy_',
-                                         delete=False) as temp_output_file:
+            output_file = tempfile.NamedTemporaryFile(mode='w+b',
+                                                      prefix='megapy_',
+                                                      delete=False)
+        try:
             k_str = a32_to_str(k)
             counter = Counter.new(128,
                                   initial_value=((iv[0] << 32) + iv[1]) << 64)
@@ -706,10 +714,12 @@ class Mega:
                                     mac_str.encode("utf8"))
             iv_str = a32_to_str([iv[0], iv[1], iv[0], iv[1]])
 
+            downloaded = 0
             for chunk_start, chunk_size in get_chunks(file_size):
                 chunk = input_file.read(chunk_size)
                 chunk = aes.decrypt(chunk)
-                temp_output_file.write(chunk)
+                output_file.write(chunk)
+                downloaded += len(chunk)
 
                 encryptor = AES.new(k_str, AES.MODE_CBC, iv_str)
                 for i in range(0, len(chunk) - 16, 16):
@@ -726,24 +736,65 @@ class Mega:
                 if len(block) % 16:
                     block += b'\0' * (16 - (len(block) % 16))
                 mac_str = mac_encryptor.encrypt(encryptor.encrypt(block))
+                logger.info('%s of %s downloaded', downloaded, file_size)
 
-                file_info = os.stat(temp_output_file.name)
-                logger.info('%s of %s downloaded', file_info.st_size,
-                            file_size)
             file_mac = str_to_a32(mac_str)
             # check mac integrity
             if (file_mac[0] ^ file_mac[1],
                     file_mac[2] ^ file_mac[3]) != meta_mac:
                 raise ValueError('Mismatched mac')
+        finally:
+            if not dest_is_stream:
+                output_file.close()
 
-        # Move the temp file only after the `with` block has closed it,
-        # otherwise Windows raises PermissionError (WinError 32): you cannot
+        # When writing into a caller-provided stream we are done.
+        if dest_is_stream:
+            return dest_path
+
+        # Otherwise move the temp file into place, only after it has been
+        # closed, or Windows raises PermissionError (WinError 32): you cannot
         # rename a file that still has an open handle.
+        if dest_path is None:
+            dest_path = ''
+        else:
+            dest_path += '/'
         output_path = Path(dest_path + file_name)
-        shutil.move(temp_output_file.name, output_path)
+        shutil.move(output_file.name, output_path)
         return output_path
 
+    @staticmethod
+    def _stream_size(stream):
+        """Bytes left in a seekable binary stream, without consuming it."""
+        pos = stream.tell()
+        stream.seek(0, os.SEEK_END)
+        size = stream.tell()
+        stream.seek(pos)
+        return size - pos
+
+    @contextlib.contextmanager
+    def _as_binary_stream(self, filename):
+        """Yield a binary stream for a path or a file-like object.
+
+        A caller-provided file-like object is yielded as-is and left open; a
+        path is opened here and closed on exit.
+        """
+        if hasattr(filename, 'read'):
+            yield filename
+        else:
+            f = open(filename, 'rb')
+            try:
+                yield f
+            finally:
+                f.close()
+
     def upload(self, filename, dest=None, dest_filename=None):
+        """Upload a file from a path or a binary file-like object.
+
+        ``filename`` may be a path or any object with a ``read()`` method (e.g.
+        ``io.BytesIO`` or an open file). For a file-like object ``dest_filename``
+        is required and the stream must be seekable. Memory use stays roughly
+        constant regardless of file size.
+        """
         # determine storage node
         if dest is None:
             # if none set, upload to cloud drive node
@@ -751,9 +802,17 @@ class Mega:
                 self.get_files()
             dest = self.root_id
 
+        is_stream = hasattr(filename, 'read')
+        if is_stream and not dest_filename:
+            raise ValueError(
+                'dest_filename is required when uploading a file-like object')
+
         # request upload url, call 'u' method
-        with open(filename, 'rb') as input_file:
-            file_size = os.path.getsize(filename)
+        with self._as_binary_stream(filename) as input_file:
+            if is_stream:
+                file_size = self._stream_size(input_file)
+            else:
+                file_size = os.path.getsize(filename)
             ul_url = self._api_request({'a': 'u', 's': file_size})['p']
 
             # generate random aes key (128) for file
