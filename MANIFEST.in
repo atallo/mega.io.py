@@ -1,4 +1,6 @@
-include HISTORY.md
+include doc/HISTORY.md
+include doc/API_INFO.md
+include doc/USAGE.md
 include README.md
 include requirements.txt
 

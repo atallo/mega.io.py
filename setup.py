@@ -17,7 +17,7 @@ with open('requirements.txt') as f:
 with open('README.md', 'r', encoding='utf-8') as rm_file:
     readme = rm_file.read()
 
-with open('HISTORY.md', 'r', encoding='utf-8') as hist_file:
+with open('doc/HISTORY.md', 'r', encoding='utf-8') as hist_file:
     history = hist_file.read()
 
 setup(name='mega.py',
@@ -26,16 +26,17 @@ setup(name='mega.py',
       package_dir={'': 'src'},
       include_package_data=True,
       zip_safe=False,
-      url='https://github.com/odwyersoftware/mega.py',
+      url='https://github.com/atallo/mega.io.py',
       description='Python lib for the Mega.co.nz API',
       long_description=readme + '\n\n' + history,
       long_description_content_type='text/markdown',
       author='O\'Dwyer Software',
       author_email='hello@odwyer.software',
-      license='Creative Commons Attribution-Noncommercial-Share Alike license',
+      license='Apache-2.0',
       install_requires=install_requires,
       classifiers=[
           'Intended Audience :: Developers',
+          'License :: OSI Approved :: Apache Software License',
           'Operating System :: OS Independent',
           'Programming Language :: Python',
           'Programming Language :: Python :: 3',

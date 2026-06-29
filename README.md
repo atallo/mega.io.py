@@ -1,178 +1,65 @@
-This library is no longer maintained, you should instead use the official CLI client MEGAcmd:
+mega.io.py
+==========
 
-Download it: https://mega.io/cmd#downloadapps
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-Learn how to use it: https://github.com/meganz/MEGAcmd/blob/master/UserGuide.md
+**Unofficial, community-maintained fork of [mega.py](https://github.com/odwyersoftware/mega.py).**
+Not affiliated with, nor endorsed by, MEGA. For the official command-line client see
+[MEGAcmd](https://mega.io/cmd).
 
+A lightweight, pure-Python library for the [MEGA](https://mega.nz) cloud storage API.
 
-----
+Features
+--------
 
+These are implemented today:
 
-Mega.py
-=======
+-   **Modern login** — v2 accounts (PBKDF2-HMAC-SHA512 with a per-user salt),
+    legacy v1 accounts, and anonymous temporary sessions.
+-   **End-to-end encryption** — per-node keys, RSA session unwrapping, AES-CBC
+    attribute decryption, and AES-CTR file content with chunked MAC integrity
+    checks.
+-   **Streaming transfers** — chunked upload and download with near-constant
+    memory use, independent of file size (to and from a filesystem path).
+-   **File operations** — fetch the node tree, resolve nodes by path, create
+    folders, upload, download, move, rename, delete (to the Rubbish Bin) and
+    permanently destroy.
+-   **Public links** — export a file or folder to a public share link, and
+    import from a public URL.
+-   **Resilient** — automatic retry with exponential backoff on MEGA's
+    rate-limit / "try again" (`EAGAIN`) responses.
+-   **Lightweight** — pure Python; AES and RSA come from a standalone crypto
+    library (pycryptodome). It does not bundle or compile MEGA's C++ SDK.
 
-[![Build
-Status](https://travis-ci.org/odwyersoftware/mega.py.png?branch=master)](https://travis-ci.org/odwyersoftware/mega.py)
-[![Downloads](https://pypip.in/d/mega.py/badge.png)](https://crate.io/packages/mega.py/)  [![PyPI version](https://badge.fury.io/py/mega.py.svg)](https://pypi.org/project/mega.py/)
+Roadmap
+-------
 
-Python library for the [Mega.co.nz](https://mega.nz/aff=Zo6IxNaHw14)
-API, currently supporting:
+The following are **planned but not yet implemented** — do not rely on them yet:
 
--   login
--   uploading
--   downloading
--   deleting
--   searching
--   sharing
--   renaming
--   moving files
+-   Hashcash proof-of-work challenges (HTTP 402).
+-   Two-factor authentication (TOTP).
+-   Reading from / writing to file-like objects (only filesystem paths are
+    supported today).
+-   Resumable transfers.
+-   Collaborative shared folders (only public share links are supported today).
 
-This is a work in progress, further functionality coming shortly.
+Usage
+-----
 
-For more detailed information see API\_INFO.md
+See the usage guide: [doc/USAGE.md](doc/USAGE.md).
 
-How To Use
-----------
+For API and protocol details see [doc/API_INFO.md](doc/API_INFO.md).
 
-### Create a Mega account
+Support
+-------
 
-First, [create an account with Mega](https://mega.nz/aff=Zo6IxNaHw14) .
+Please report bugs and ask questions via GitHub Issues:
+<https://github.com/atallo/mega.io.py/issues>
 
-### Install mega.py package
+License
+-------
 
-Run the following command, or run setup from the latest github source.
+Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
 
-```python
-pip install mega.py
-```
-
-### Import mega.py
-
-```python
-from mega import Mega
-```
-
-### Create an instance of Mega.py
-
-```python
-mega = Mega()
-```
-
-### Login to Mega
-
-```python
-m = mega.login(email, password)
-# login using a temporary anonymous account
-m = mega.login()
-```
-
-### Get user details
-
-```python
-details = m.get_user()
-```
-
-### Get account balance (Pro accounts only)
-
-```python
-balance = m.get_balance()
-```
-
-### Get account disk quota
-
-```python
-quota = m.get_quota()
-```
-
-### Get account storage space
-
-```python
-# specify unit output kilo, mega, gig, else bytes will output
-space = m.get_storage_space(kilo=True)
-```
-
-### Get account files
-
-```python
-files = m.get_files()
-```
-
-### Upload a file, and get its public link
-
-```python
-file = m.upload('myfile.doc')
-m.get_upload_link(file)
-# see mega.py for destination and filename options
-```
-
-### Export a file or folder
-
-```python
-public_exported_web_link = m.export('myfile.doc')
-public_exported_web_link = m.export('my_mega_folder/my_sub_folder_to_share')
-# e.g. https://mega.nz/#F!WlVl1CbZ!M3wmhwZDENMNUJoBsdzFng
-```
-
-### Find a file or folder
-
-```python
-folder = m.find('my_mega_folder')
-# Excludes results which are in the Trash folder (i.e. deleted)
-folder = m.find('my_mega_folder', exclude_deleted=True)
-```
-
-### Upload a file to a destination folder
-
-```python
-folder = m.find('my_mega_folder')
-m.upload('myfile.doc', folder[0])
-```
-
-### Download a file from URL or file obj, optionally specify destination folder
-
-```python
-file = m.find('myfile.doc')
-m.download(file)
-m.download_url('https://mega.co.nz/#!utYjgSTQ!OM4U3V5v_W4N5edSo0wolg1D5H0fwSrLD3oLnLuS9pc')
-m.download(file, '/home/john-smith/Desktop')
-# specify optional download filename (download_url() supports this also)
-m.download(file, '/home/john-smith/Desktop', 'myfile.zip')
-```
-
-### Import a file from URL, optionally specify destination folder
-
-```python
-m.import_public_url('https://mega.co.nz/#!utYjgSTQ!OM4U3V5v_W4N5edSo0wolg1D5H0fwSrLD3oLnLuS9pc')
-folder_node = m.find('Documents')[1]
-m.import_public_url('https://mega.co.nz/#!utYjgSTQ!OM4U3V5v_W4N5edSo0wolg1D5H0fwSrLD3oLnLuS9pc', dest_node=folder_node)
-```
-
-### Create a folder
-
-```python
-m.create_folder('new_folder')
-m.create_folder('new_folder/sub_folder/subsub_folder')
-```
-
-Returns a dict of folder node name and node\_id, e.g.
-
-```python
-{
-  'new_folder': 'qpFhAYwA',
-  'sub_folder': '2pdlmY4Z',
-  'subsub_folder': 'GgMFCKLZ'
-}
-```
-
-### Rename a file or a folder
-
-```python
-file = m.find('myfile.doc')
-m.rename(file, 'my_file.doc')
-```
-
-## Contact Support
-
-For paid priority support contact [mega@odwyer.software](mailto:mega@odwyer.software).
-
-**[UK Python Development Agency](https://odwyer.software/)**
+This project is an unofficial fork of `mega.py` by O'Dwyer Software, used under
+the Apache 2.0 license; original attribution is retained.

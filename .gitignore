@@ -171,3 +171,6 @@ venv
 # Mac crap
 .DS_Store
 *.sqlite
+
+# Claude Code local settings
+.claude/
