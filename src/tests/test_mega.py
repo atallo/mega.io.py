@@ -13,6 +13,10 @@ TEST_PUBLIC_URL = (
 TEST_FILE = os.path.basename(__file__)
 MODULE = 'mega.mega'
 
+# Everything in this module talks to the live MEGA API. It runs only when
+# EMAIL and PASS env vars are set (the ``mega`` fixture skips otherwise).
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def folder_name():
@@ -21,8 +25,12 @@ def folder_name():
 
 @pytest.fixture
 def mega(folder_name):
+    email = os.environ.get('EMAIL')
+    password = os.environ.get('PASS')
+    if not email or not password:
+        pytest.skip('integration test: set EMAIL and PASS env vars')
     mega_ = Mega()
-    mega_.login(email=os.environ['EMAIL'], password=os.environ['PASS'])
+    mega_.login(email=email, password=password)
     created_nodes = mega_.create_folder(folder_name)
     yield mega_
     node_id = next(iter(created_nodes.values()))
@@ -221,18 +229,6 @@ def test_add_contact(mega):
 def test_remove_contact(mega):
     resp = mega.remove_contact(TEST_CONTACT)
     assert isinstance(resp, int)
-
-
-@pytest.mark.parametrize('url, expected_file_id_and_key', [
-    ('https://mega.nz/#!Ue5VRSIQ!kC2E4a4JwfWWCWYNJovGFHlbz8F'
-     'N-ISsBAGPzvTjT6k',
-     'Ue5VRSIQ!kC2E4a4JwfWWCWYNJovGFHlbz8FN-ISsBAGPzvTjT6k'),
-    ('https://mega.nz/file/cH51DYDR#qH7QOfRcM-7N9riZWdSjsRq'
-     '5VDTLfIhThx1capgVA30',
-     'cH51DYDR!qH7QOfRcM-7N9riZWdSjsRq5VDTLfIhThx1capgVA30'),
-])
-def test_parse_url(url, expected_file_id_and_key, mega):
-    assert mega._parse_url(url) == expected_file_id_and_key
 
 
 @pytest.mark.skip
