@@ -2,7 +2,6 @@ import math
 import re
 import json
 import logging
-import secrets
 from pathlib import Path
 import hashlib
 from Crypto.Cipher import AES
@@ -15,7 +14,8 @@ import tempfile
 import shutil
 
 import requests
-from tenacity import retry, wait_exponential, retry_if_exception_type
+from tenacity import (retry, wait_exponential, retry_if_exception_type,
+                      stop_after_attempt)
 
 from .errors import ValidationError, RequestError
 from .crypto import (a32_to_base64, encrypt_key, base64_url_encode,
@@ -150,7 +150,8 @@ class Mega:
             self.sid = base64_url_encode(sid[:43])
 
     @retry(retry=retry_if_exception_type(RuntimeError),
-           wait=wait_exponential(multiplier=2, min=2, max=60))
+           wait=wait_exponential(multiplier=2, min=2, max=60),
+           stop=stop_after_attempt(8))
     def _api_request(self, data):
         params = {'id': self.sequence_num}
         self.sequence_num += 1
@@ -595,40 +596,17 @@ class Mega:
             except (RequestError, KeyError):
                 pass
 
-        master_key_cipher = AES.new(a32_to_str(self.master_key), AES.MODE_ECB)
-        ha = base64_url_encode(
-            master_key_cipher.encrypt(node_data['h'].encode("utf8") +
-                                      node_data['h'].encode("utf8")))
-
-        share_key = secrets.token_bytes(16)
-        ok = base64_url_encode(master_key_cipher.encrypt(share_key))
-
-        share_key_cipher = AES.new(share_key, AES.MODE_ECB)
-        node_key = node_data['k']
-        encrypted_node_key = base64_url_encode(
-            share_key_cipher.encrypt(a32_to_str(node_key)))
-
-        node_id = node_data['h']
-        request_body = [{
-            'a':
-            's2',
-            'n':
-            node_id,
-            's': [{
-                'u': 'EXP',
-                'r': 0
-            }],
-            'i':
-            self.request_id,
-            'ok':
-            ok,
-            'ha':
-            ha,
-            'cr': [[node_id], [node_id], [0, 0, encrypted_node_key]]
-        }]
-        self._api_request(request_body)
-        nodes = self.get_files()
-        return self.get_folder_link(nodes[node_id])
+        # Creating a NEW public link for a folder requires registering the
+        # share key in MEGA's Key Manager (the encrypted "^!keys" keyring,
+        # introduced after this library was written). Without it the "s2"
+        # request is rejected with EAGAIN (-3) no matter how it is built.
+        # Exporting an already-shared folder is handled above; creating a new
+        # folder share is not supported.
+        raise NotImplementedError(
+            "Creating a public link for a folder is not supported: it requires "
+            "MEGA's Key Manager (the '^!keys' keyring), which this library does "
+            "not implement. Exporting individual files works; for folder links "
+            "use the official MEGAcmd client.")
 
     def download_url(self, url, dest_path=None, dest_filename=None):
         """
@@ -741,9 +719,13 @@ class Mega:
             if (file_mac[0] ^ file_mac[1],
                     file_mac[2] ^ file_mac[3]) != meta_mac:
                 raise ValueError('Mismatched mac')
-            output_path = Path(dest_path + file_name)
-            shutil.move(temp_output_file.name, output_path)
-            return output_path
+
+        # Move the temp file only after the `with` block has closed it,
+        # otherwise Windows raises PermissionError (WinError 32): you cannot
+        # rename a file that still has an open handle.
+        output_path = Path(dest_path + file_name)
+        shutil.move(temp_output_file.name, output_path)
+        return output_path
 
     def upload(self, filename, dest=None, dest_filename=None):
         # determine storage node

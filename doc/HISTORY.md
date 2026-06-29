@@ -1,10 +1,21 @@
 Release History
 ===============
 
-1.0.9 (unreleased)
+0.0.1 (2026-06-29)
 ------------------
 
-- Nothing changed yet.
+First release of this unofficial fork, getting the library working on modern
+Python (3.14):
+
+-   Fix downloads on Windows: move the temp file only after the `with` block
+    has closed it (avoids `PermissionError` WinError 32).
+-   Cap API retries with `stop_after_attempt` so a persistent `EAGAIN (-3)` no
+    longer retries forever.
+-   Drop the broken `pathlib` backport requirement; relax `tenacity` and bump
+    `pycryptodome` (its abi3 wheel installs on Python 3.14 without compiling).
+-   Folder `export()` now raises `NotImplementedError` instead of hanging:
+    creating a folder share needs MEGA's key manager, which is not implemented.
+-   Reorganise documentation into `doc/`; fix license metadata to Apache-2.0.
 
 
 1.0.8 (2020-06-25)

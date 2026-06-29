@@ -24,8 +24,8 @@ These are implemented today:
 -   **File operations** — fetch the node tree, resolve nodes by path, create
     folders, upload, download, move, rename, delete (to the Rubbish Bin) and
     permanently destroy.
--   **Public links** — export a file or folder to a public share link, and
-    import from a public URL.
+-   **Public links** — export a *file* to a public link, and import from a
+    public URL. (Folder links are not supported — see Roadmap.)
 -   **Resilient** — automatic retry with exponential backoff on MEGA's
     rate-limit / "try again" (`EAGAIN`) responses.
 -   **Lightweight** — pure Python; AES and RSA come from a standalone crypto
@@ -41,7 +41,10 @@ The following are **planned but not yet implemented** — do not rely on them ye
 -   Reading from / writing to file-like objects (only filesystem paths are
     supported today).
 -   Resumable transfers.
--   Collaborative shared folders (only public share links are supported today).
+-   Folder public links / shared folders — creating a folder share requires
+    MEGA's Key Manager (the encrypted `^!keys` keyring), which this library does
+    not implement, so the API rejects it. Only individual *file* links work
+    today.
 
 Usage
 -----
