@@ -14,8 +14,8 @@ import tempfile
 import shutil
 
 import requests
-from tenacity import (retry, wait_exponential, retry_if_exception_type,
-                      stop_after_attempt)
+from tenacity import (retry, wait_random_exponential,
+                      retry_if_exception_type, stop_after_attempt)
 
 from .errors import ValidationError, RequestError
 from .crypto import (a32_to_base64, encrypt_key, base64_url_encode,
@@ -36,6 +36,7 @@ class Mega:
         self.sequence_num = random.randint(0, 0xFFFFFFFF)
         self.request_id = make_id(10)
         self._trash_folder_node_id = None
+        self._nodes = None  # cached node tree; invalidated on mutations
 
         if options is None:
             options = {}
@@ -150,7 +151,7 @@ class Mega:
             self.sid = base64_url_encode(sid[:43])
 
     @retry(retry=retry_if_exception_type(RuntimeError),
-           wait=wait_exponential(multiplier=2, min=2, max=60),
+           wait=wait_random_exponential(multiplier=2, max=60),
            stop=stop_after_attempt(8))
     def _api_request(self, data):
         params = {'id': self.sequence_num}
@@ -162,6 +163,12 @@ class Mega:
         # ensure input data is a list
         if not isinstance(data, list):
             data = [data]
+
+        # A mutating command may change the node tree, so drop the cached copy
+        # and let the next get_files() re-fetch it.
+        if any(isinstance(d, dict) and d.get('a') in ('p', 'm', 'a', 'd', 's2')
+               for d in data):
+            self._nodes = None
 
         url = f'{self.schema}://g.api.{self.domain}/cs'
         response = requests.post(
@@ -182,8 +189,9 @@ class Mega:
         if int_resp is not None:
             if int_resp == 0:
                 return int_resp
-            if int_resp == -3:
-                msg = 'Request failed, retrying'
+            if int_resp in (-3, -4):
+                # -3 EAGAIN / -4 ERATELIMIT: transient, retry with backoff.
+                msg = f'Request failed ({int_resp}), retrying'
                 logger.info(msg)
                 raise RuntimeError(msg)
             raise RequestError(int_resp)
@@ -346,7 +354,14 @@ class Mega:
             except TypeError:
                 continue
 
-    def get_files(self):
+    def get_files(self, force=False):
+        """Return the node tree as a dict ``{handle: node}``.
+
+        The result is cached and reused; any mutating API call invalidates the
+        cache. Pass ``force=True`` to bypass the cache and re-fetch.
+        """
+        if self._nodes is not None and not force:
+            return self._nodes
         logger.info('Getting all files...')
         files = self._api_request({'a': 'f', 'c': 1, 'r': 1})
         files_dict = {}
@@ -357,6 +372,7 @@ class Mega:
             # ensure each file has a name before returning
             if processed_file['a']:
                 files_dict[file['h']] = processed_file
+        self._nodes = files_dict
         return files_dict
 
     def get_upload_link(self, file):
