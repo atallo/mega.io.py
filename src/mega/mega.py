@@ -579,16 +579,21 @@ class Mega:
                 post_list.append({"a": "d", "n": file, "i": self.request_id})
             return self._api_request(post_list)
 
-    def download(self, file, dest_path=None, dest_filename=None):
+    def download(self, file, dest_path=None, dest_filename=None, resume=False):
         """
-        Download a file by it's file object
+        Download a file by it's file object.
+
+        With ``resume=True`` (path destinations only) the download is written
+        straight to the final file and an interrupted, partial download is
+        continued instead of restarted.
         """
         return self._download_file(file_handle=None,
                                    file_key=None,
                                    file=file[1],
                                    dest_path=dest_path,
                                    dest_filename=dest_filename,
-                                   is_public=False)
+                                   is_public=False,
+                                   resume=resume)
 
     def _export_file(self, node):
         node_data = self._node_data(node)
@@ -629,7 +634,8 @@ class Mega:
             "not implement. Exporting individual files works; for folder links "
             "use the official MEGAcmd client.")
 
-    def download_url(self, url, dest_path=None, dest_filename=None):
+    def download_url(self, url, dest_path=None, dest_filename=None,
+                     resume=False):
         """
         Download a file by it's public url
         """
@@ -642,6 +648,7 @@ class Mega:
             dest_path=dest_path,
             dest_filename=dest_filename,
             is_public=True,
+            resume=resume,
         )
 
     def _download_file(self,
@@ -650,7 +657,8 @@ class Mega:
                        dest_path=None,
                        dest_filename=None,
                        is_public=False,
-                       file=None):
+                       file=None,
+                       resume=False):
         if file is None:
             if is_public:
                 file_key = base64_to_a32(file_key)
@@ -691,22 +699,40 @@ class Mega:
         else:
             file_name = attribs['n']
 
-        input_file = requests.get(file_url, stream=True).raw
-
-        # A writable binary file-like object passed as dest_path receives the
-        # decrypted bytes directly; otherwise write to a temp file and then move
-        # it into dest_path (treated as a directory).
+        # Decide the sink. A writable file-like object passed as dest_path
+        # receives the decrypted bytes directly. Otherwise we write to a path:
+        # normally to a temp file we then move into place (atomic), or, when
+        # resuming, straight to the final file so a partial download survives.
         dest_is_stream = dest_path is not None and hasattr(dest_path, 'write')
+        resume_point = 0
+        output_path = None
         if dest_is_stream:
             output_file = dest_path
+        elif resume:
+            prefix = (dest_path + '/') if dest_path else ''
+            output_path = Path(prefix + file_name)
+            existing = output_path.stat().st_size if output_path.exists() else 0
+            # Resume only from a whole number of chunks; drop any partial tail.
+            for chunk_start, chunk_size in get_chunks(file_size):
+                if chunk_start + chunk_size > existing:
+                    break
+                resume_point = chunk_start + chunk_size
+            output_file = open(output_path, 'r+b' if existing else 'w+b')
         else:
             output_file = tempfile.NamedTemporaryFile(mode='w+b',
                                                       prefix='megapy_',
                                                       delete=False)
+
+        # Only fetch the bytes still needed.
+        headers = {'Range': 'bytes=%d-' % resume_point} if resume_point else {}
+        input_file = requests.get(file_url, headers=headers, stream=True).raw
+
         try:
             k_str = a32_to_str(k)
-            counter = Counter.new(128,
-                                  initial_value=((iv[0] << 32) + iv[1]) << 64)
+            counter = Counter.new(
+                128,
+                initial_value=((((iv[0] << 32) + iv[1]) << 64)
+                               + resume_point // 16))
             aes = AES.new(k_str, AES.MODE_CTR, counter=counter)
 
             mac_str = '\0' * 16
@@ -714,12 +740,16 @@ class Mega:
                                     mac_str.encode("utf8"))
             iv_str = a32_to_str([iv[0], iv[1], iv[0], iv[1]])
 
-            downloaded = 0
             for chunk_start, chunk_size in get_chunks(file_size):
-                chunk = input_file.read(chunk_size)
-                chunk = aes.decrypt(chunk)
-                output_file.write(chunk)
-                downloaded += len(chunk)
+                if chunk_start < resume_point:
+                    # Already on disk: read the plaintext back to rebuild the
+                    # running MAC without re-downloading or re-writing it.
+                    chunk = output_file.read(chunk_size)
+                else:
+                    if resume_point and chunk_start == resume_point:
+                        output_file.truncate()  # drop any partial tail
+                    chunk = aes.decrypt(input_file.read(chunk_size))
+                    output_file.write(chunk)
 
                 encryptor = AES.new(k_str, AES.MODE_CBC, iv_str)
                 for i in range(0, len(chunk) - 16, 16):
@@ -736,7 +766,8 @@ class Mega:
                 if len(block) % 16:
                     block += b'\0' * (16 - (len(block) % 16))
                 mac_str = mac_encryptor.encrypt(encryptor.encrypt(block))
-                logger.info('%s of %s downloaded', downloaded, file_size)
+                logger.info('%s of %s downloaded', chunk_start + len(chunk),
+                            file_size)
 
             file_mac = str_to_a32(mac_str)
             # check mac integrity
@@ -747,11 +778,13 @@ class Mega:
             if not dest_is_stream:
                 output_file.close()
 
-        # When writing into a caller-provided stream we are done.
+        # Stream sink: nothing more to do.
         if dest_is_stream:
             return dest_path
-
-        # Otherwise move the temp file into place, only after it has been
+        # Resume sink: already written to the final path.
+        if resume:
+            return output_path
+        # Normal sink: move the temp file into place, only after it has been
         # closed, or Windows raises PermissionError (WinError 32): you cannot
         # rename a file that still has an open handle.
         if dest_path is None:

@@ -22,7 +22,9 @@ These are implemented today:
     checks.
 -   **Streaming transfers** — chunked upload and download with near-constant
     memory use, independent of file size, to and from either a filesystem path
-    or a binary file-like object (e.g. `io.BytesIO`).
+    or a binary file-like object (e.g. `io.BytesIO`). Interrupted downloads can
+    be resumed with `download(..., resume=True)` (re-fetches only the missing
+    bytes via HTTP Range).
 -   **File operations** — fetch the node tree, resolve nodes by path, create
     folders, upload, download, move, rename, delete (to the Rubbish Bin) and
     permanently destroy.
@@ -39,7 +41,7 @@ Roadmap
 The following are **planned but not yet implemented** — do not rely on them yet:
 
 -   Hashcash proof-of-work challenges (HTTP 402).
--   Resumable transfers.
+-   Resumable uploads (downloads can already be resumed).
 -   Folder public links / shared folders — creating a folder share requires
     MEGA's Key Manager (the encrypted `^!keys` keyring), which this library does
     not implement, so the API rejects it. Only individual *file* links work
