@@ -23,8 +23,9 @@ def _no_retry_wait():
 
 
 class _Resp:
-    def __init__(self, text):
+    def __init__(self, text, status_code=200):
         self.text = text
+        self.status_code = status_code
 
 
 def _post_recording(calls, responses=None):
@@ -217,3 +218,17 @@ def test_upload_stream_requires_dest_filename():
     m.root_id = 'ROOT'
     with pytest.raises(ValueError):
         m.upload(io.BytesIO(b'data'), dest='ROOT')
+
+
+# --- hashcash proof-of-work (HTTP 402) -------------------------------------
+
+def test_http_402_raises_hashcash_error():
+    from mega.errors import HashcashError
+    m = Mega()
+
+    def needs_pow(url, params=None, data=None, timeout=None):
+        return _Resp('proof-of-work challenge', status_code=402)
+
+    with patch('mega.mega.requests.post', side_effect=needs_pow):
+        with pytest.raises(HashcashError):
+            m.get_files(force=True)

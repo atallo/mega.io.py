@@ -40,12 +40,19 @@ Roadmap
 
 The following are **planned but not yet implemented** — do not rely on them yet:
 
--   Hashcash proof-of-work challenges (HTTP 402).
 -   Resumable uploads (downloads can already be resumed).
 -   Folder public links / shared folders — creating a folder share requires
     MEGA's Key Manager (the encrypted `^!keys` keyring), which this library does
     not implement, so the API rejects it. Only individual *file* links work
     today.
+
+Non-goals
+---------
+
+-   **Solving MEGA's proof-of-work (HTTP 402) challenges.** They are detected
+    and surfaced as a clear `HashcashError`, but solving them is intentionally
+    out of scope: a normal user never needs it, and the abusive/bot traffic it
+    throttles is not a use case this library aims to serve.
 
 Usage
 -----

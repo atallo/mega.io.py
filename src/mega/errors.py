@@ -5,6 +5,17 @@ class ValidationError(Exception):
     pass
 
 
+class HashcashError(Exception):
+    """
+    Raised when MEGA demands a hashcash proof-of-work (HTTP 402).
+
+    Solving the proof-of-work is intentionally out of scope, so the request
+    cannot be completed automatically. It typically appears on some logins
+    (e.g. from flagged networks or after repeated attempts).
+    """
+    pass
+
+
 _CODE_TO_DESCRIPTIONS = {
     -1: ('EINTERNAL',
          ('An internal error has occurred. Please submit a bug report, '

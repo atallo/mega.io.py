@@ -18,7 +18,7 @@ import requests
 from tenacity import (retry, wait_random_exponential,
                       retry_if_exception_type, stop_after_attempt)
 
-from .errors import ValidationError, RequestError
+from .errors import ValidationError, RequestError, HashcashError
 from .crypto import (a32_to_base64, encrypt_key, base64_url_encode,
                      encrypt_attr, base64_to_a32, base64_url_decode,
                      decrypt_attr, a32_to_str, get_chunks, str_to_a32,
@@ -182,6 +182,17 @@ class Mega:
             data=json.dumps(data),
             timeout=self.timeout,
         )
+        if response.status_code == 402:
+            # MEGA asks for a hashcash proof-of-work before serving this
+            # request. Solving it is intentionally out of scope; fail with a
+            # clear message instead of choking on the non-JSON body.
+            raise HashcashError(
+                'MEGA returned HTTP 402: this request needs a hashcash '
+                'proof-of-work challenge, which this library does not implement '
+                '(by design). It usually appears on some logins (flagged '
+                'networks or repeated attempts); try again later or from '
+                'another connection.'
+            )
         json_resp = json.loads(response.text)
         try:
             if isinstance(json_resp, list):
