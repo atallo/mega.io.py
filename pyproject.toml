@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mega.io.py"
+version = "0.0.2"
+description = "Pure-Python client for the MEGA cloud storage API (unofficial fork of mega.py)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "atallo" }]
+keywords = ["mega", "mega.nz", "cloud", "storage", "api", "client"]
+dependencies = [
+    "requests>=2.0.0",
+    "pycryptodome>=3.20.0,<4.0.0",
+    "tenacity>=8.0.0",
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Internet :: WWW/HTTP",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    "requests-mock>=1.12",
+    "flake8>=7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/atallo/mega.io.py"
+Issues = "https://github.com/atallo/mega.io.py/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+addopts = "-v"
+testpaths = ["src/tests"]
+markers = [
+    "integration: tests that hit the live MEGA API (need EMAIL and PASS env vars)",
+]

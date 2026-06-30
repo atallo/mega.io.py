@@ -1,8 +1,0 @@
--r requirements.txt
-
-# Test and lint tooling. Modern, unpinned-ish versions that install cleanly on
-# Python 3.10-3.14 (the old 2020-era pins did not).
-pytest>=8.0
-pytest-mock>=3.12
-requests-mock>=1.12
-flake8>=7.0

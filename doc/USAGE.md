@@ -5,12 +5,12 @@ How To Use
 
 First, [create an account with Mega](https://mega.nz/aff=Zo6IxNaHw14) .
 
-### Install mega.py package
+### Install
 
-Run the following command, or run setup from the latest github source.
+Install the latest version from GitHub (not published on PyPI):
 
-```python
-pip install mega.py
+```bash
+pip install git+https://github.com/atallo/mega.io.py.git
 ```
 
 ### Import mega.py

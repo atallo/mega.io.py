@@ -1,6 +1,23 @@
 Release History
 ===============
 
+0.0.2 (2026-06-29)
+------------------
+
+Rolls up the work since 0.0.1:
+
+-   Cache the node tree and harden rate-limit handling (retry on `EAGAIN`/`-3`
+    and `ERATELIMIT`/`-4` with jittered exponential backoff).
+-   Two-factor (TOTP) login via the `mfa_code` argument.
+-   Upload from and download to binary file-like objects (e.g. `io.BytesIO`).
+-   Resumable downloads (`download(..., resume=True)`) using HTTP Range.
+-   Detect MEGA's hashcash proof-of-work (HTTP 402) and raise a clear
+    `HashcashError` (solving it is a non-goal).
+-   Offline unit-test suite and GitHub Actions CI (Python 3.10-3.14).
+-   Modern packaging: migrate to `pyproject.toml`; drop `setup.py` and the
+    `requirements*.txt` files.
+
+
 0.0.1 (2026-06-29)
 ------------------
 
